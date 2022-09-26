@@ -285,4 +285,75 @@ class UnmarshalTest extends TestCase
         );
         $this->assertCount(2, $input->people);
     }
+
+    /**
+     * TODO: comment
+     *
+     * @throws Exception
+     *
+     * @return void
+     */
+    public function testUnmarshalNullables(): void
+    {
+        $input = new class() {
+            #[JSON('age')]
+            public ?int $age;
+
+            #[JSON('first_name')]
+            public null|string $firstName;
+
+            #[JSON('is_human')]
+            public bool|null $isHuman;
+
+            #[JSON('latitude')]
+            public ?float $latitude;
+
+            #[JSON('people', ParentClass::class)]
+            public ?array $people;
+
+            #[JSON('person')]
+            public ?ParentClass $person;
+
+        };
+
+        Unmarshal::decode(
+            $input,
+            [
+                'latitude'   => 1.1234567,
+            ]
+        );
+        $this->assertNull($input->age);
+        $this->assertNull($input->firstName);
+        $this->assertNull($input->isHuman);
+        $this->assertEquals(1.1234567, $input->latitude);
+        $this->assertNull($input->people);
+    }
+
+    /**
+     * TODO: comment
+     *
+     * @throws Exception
+     *
+     * @return void
+     */
+    public function testUnmarshalScalarWithUnionType(): void
+    {
+        $input = new class() {
+            #[JSON('id')]
+            public int|string $id;
+
+            #[JSON('code')]
+            public int|string $code;
+        };
+
+        Unmarshal::decode(
+            $input,
+            [
+                'id'   => 123,
+                'code' => "123",
+            ]
+        );
+        $this->assertSame(123, $input->id);
+        $this->assertSame("123", $input->code);
+    }
 }
