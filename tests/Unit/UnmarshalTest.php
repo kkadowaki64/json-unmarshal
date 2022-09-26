@@ -328,4 +328,32 @@ class UnmarshalTest extends TestCase
         $this->assertEquals(1.1234567, $input->latitude);
         $this->assertNull($input->people);
     }
+
+    /**
+     * TODO: comment
+     *
+     * @throws Exception
+     *
+     * @return void
+     */
+    public function testUnmarshalScalarWithUnionType(): void
+    {
+        $input = new class() {
+            #[JSON('id')]
+            public int|string $id;
+
+            #[JSON('code')]
+            public int|string $code;
+        };
+
+        Unmarshal::decode(
+            $input,
+            [
+                'id'   => 123,
+                'code' => "123",
+            ]
+        );
+        $this->assertSame(123, $input->id);
+        $this->assertSame("123", $input->code);
+    }
 }
