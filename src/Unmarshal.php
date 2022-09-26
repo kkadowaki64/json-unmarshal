@@ -7,6 +7,7 @@ use JSON\Attributes\JSON;
 use ReflectionClass;
 use ReflectionException;
 use ReflectionType;
+use ReflectionUnionType;
 
 /**
  * Class Unmarshal.
@@ -26,42 +27,54 @@ class Unmarshal
             $attributes = $property->getAttributes(JSON::class);
             foreach ($attributes as $attribute) {
                 $jsonAttribute = $attribute->newInstance();
-                $propertyType = $property->getType();
-                if (is_null($propertyType)) {
+                if (! $property->hasType()) {
                     continue;
                 }
+                $propertyType = $property->getType();
 
-                $value = self::getValueFromData(
+                $targetValue = self::getValueFromData(
                     $data,
                     $jsonAttribute->field,
                     $class->{$property->name} ?? null,
                 );
 
-                /** @var ReflectionType $propertyType */
-                switch ($propertyType->getName()) {
+                $targetType = match ($propertyType::class) {
+                    \ReflectionNamedType::class => $propertyType->getName(),
+                    \ReflectionUnionType::class => self::detectType($targetValue, $propertyType),
+                    default => null,
+                };
+                if (is_null($targetType)) {
+                    throw new Exception(sprintf('unexpected class `%s`', $propertyType::class));
+                }
+
+                /** @var string $targetType */
+                switch ($targetType) {
                     case 'string':
                         $class->{$property->name} =
-                            is_null($value)
+                            is_null($targetValue)
                             ? $propertyType->allowsNull() ? null : ''
-                            : (string) $value;
+                            : (string) $targetValue;
                         break;
                     case 'int':
                         $class->{$property->name} =
-                            is_null($value)
+                            is_null($targetValue)
                                 ? $propertyType->allowsNull() ? null : 0
-                                : (int) $value;
+                                : (int) $targetValue;
                         break;
                     case 'bool':
                         $class->{$property->name} =
-                            is_null($value)
+                            is_null($targetValue)
                                 ? $propertyType->allowsNull() ? null : false
-                                : (bool) $value;
+                                : (bool) $targetValue;
                         break;
                     case 'float':
                         $class->{$property->name} =
-                            is_null($value)
+                            is_null($targetValue)
                                 ? $propertyType->allowsNull() ? null : 0.0
-                                : (float) $value;
+                                : (float) $targetValue;
+                        break;
+                    case 'null':
+                        $class->{$property->name} = null;
                         break;
                     case 'array':
                         self::decodeArray(
@@ -203,5 +216,44 @@ class Unmarshal
                 self::decode($class->{$propertyName}, $data[$lookupFieldName]);
             }
         }
+    }
+
+    /**
+     * @param mixed $target
+     * @param ReflectionUnionType $unionType
+     * @return string
+     *
+     * @throws Exception
+     */
+    private static function detectType(mixed $target, ReflectionUnionType $unionType): string {
+        $candidates = array_map(fn($t) => $t->getName(), $unionType->getTypes());
+
+        $result = match (gettype($target)) {
+            'integer' => in_array('int', $candidates)
+                ? 'int'
+                : new Exception("message" /* TODO */),
+            'string'  => in_array('string', $candidates)
+                ? 'string'
+                : new Exception("message" /* TODO */),
+            'boolean' => in_array('bool', $candidates)
+                ? 'bool'
+                : new Exception("message" /* TODO */),
+            'double'  => in_array('float', $candidates)
+                ? 'float'
+                : new Exception("message" /* TODO */),
+            'array'   => in_array('array', $candidates)
+                ? 'array'
+                : new Exception("message" /* TODO */),
+            'NULL'    => in_array('null', $candidates)
+                ? 'null'
+                : new Exception("message" /* TODO */),
+            'object', 'resource', 'resource (closed)' => new Exception("unexpected input" /* TODO */),
+            'unknown type'                            => new Exception("unknown type" /* TODO */),
+        };
+
+        if ($result instanceof \Exception) {
+            throw $result;
+        }
+        return $result;
     }
 }
